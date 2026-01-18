@@ -641,7 +641,7 @@ function showDeleteConfirm() {
     const showCloseBtn = isPopupContext && isTab;
     const controlsHtml = (isBookmark || isTab) ? `
       <div class="prd-stv-item-controls" style="opacity:0;transition:opacity 0.2s ease;margin-left:auto;padding-left:8px;">
-        ${showCloseBtn ? `<button class="prd-stv-close-btn" title="Close tab" data-close-tab-id="${item.id}">✓</button>` : ''}
+        ${showCloseBtn ? `<button class="prd-stv-close-btn" title="Close tab" data-close-tab-id="${item.id}"><span class="material-icons-round">check</span></button>` : ''}
         <button class="prd-stv-menu-btn" title="More options" ${isBookmark ? `data-bookmark-id="${item.id}"` : `data-tab-id="${item.id}"`}
           style="background:transparent;border:none;color:#9b9b9b;font-size:16px;cursor:pointer;padding:4px;border-radius:15px;">⋯</button>
       </div>
@@ -654,7 +654,7 @@ function showDeleteConfirm() {
       <div style="display:flex;align-items:center;width:100%;">
         ${iconHtml}
         <div style="display:flex;flex-direction:row; gap: 5px;flex:1;min-width:0;">
-          <span style="text-overflow: ellipsis;white-space: nowrap;overflow: hidden;">${highlightMatches(displayTitle, input?.value.trim())}</span>
+          <span class="prd-stv-title" style="text-overflow: ellipsis;white-space: nowrap;overflow: hidden;">${highlightMatches(displayTitle, input?.value.trim())}</span>
           <span class="prd-stv-url" style="text-overflow: ellipsis;white-space: nowrap;overflow: hidden;">${getSubtitle(item)}</span>
         </div>
         ${controlsHtml}
@@ -862,80 +862,89 @@ function showToast(message, duration = 2000) {
 
   // Bookmark context menu for content.js overlay
   function showBookmarkContextMenu(event, bookmark, itemElement) {
-    // Remove any existing context menu
-    closeBookmarkContextMenu();
+    if (!window.itemContextMenu) {
+      showBookmarkContextMenuLegacy(event, bookmark, itemElement);
+      return;
+    }
 
-    // Create context menu
-    const contextMenu = document.createElement('div');
-    contextMenu.id = 'prd-stv-bookmark-context-menu';
-    contextMenu.style.cssText = `
-      position: fixed;
-      background: #2b2b2b;
-      border: 1px solid #555;
-      border-radius: 15px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      min-width: 120px;
-      overflow: hidden;
-      z-index: 2147483648;
-      animation: contextMenuIn 0.15s ease-out;
-    `;
-
-    contextMenu.innerHTML = `
-      <div class="context-item" data-action="rename" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
-        <span>Rename</span>
-      </div>
-      <div class="context-item" data-action="move" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;">
-        <span>Move to...</span>
-      </div>
-    `;
-
-    // Add hover styles to shadow root if available
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes contextMenuIn {
-        from { opacity: 0; transform: scale(0.95) translateY(-4px); }
-        to { opacity: 1; transform: scale(1) translateY(0); }
+    const computeHasDate = async () => {
+      try {
+        if (!window.datedLinksModule) return false;
+        return await window.datedLinksModule.hasDate(bookmark.url);
+      } catch (error) {
+        console.warn('Failed to check dated status:', error);
+        return false;
       }
-      #prd-stv-bookmark-context-menu .context-item:hover {
-        background: #353535 !important;
-      }
-    `;
-    document.head.appendChild(style);
+    };
 
-    // Position the menu relative to the clicked button
-    const buttonRect = event.target.getBoundingClientRect();
-    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
-    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
+    (async () => {
+      const hasDate = await computeHasDate();
 
-    // Add to shadow root if available
-    document.body.appendChild(contextMenu);
+      const handleDateAction = async (action) => {
+        if (!window.datedLinksModule) {
+          showToast('Date feature not available');
+          return true;
+        }
 
-    // Handle menu item clicks
-    contextMenu.addEventListener('click', (e) => {
-      const action = e.target.closest('.context-item')?.dataset.action;
-      if (action === 'rename') {
-        startBookmarkRename(bookmark, itemElement);
-      } else if (action === 'move') {
-        showBookmarkMoveDialog(bookmark);
-      }
-      closeBookmarkContextMenu();
-    });
+        const itemData = {
+          url: bookmark.url,
+          title: bookmark.title || 'Untitled',
+          favicon: bookmark.favicon || '',
+          itemType: 'bookmark',
+          itemId: bookmark.id
+        };
 
-    // Close menu when clicking outside
-    setTimeout(() => {
-      document.addEventListener('click', closeBookmarkContextMenu, { once: true });
-    }, 10);
+        if (action === 'add-date-tomorrow') {
+          const dates = window.itemContextMenu.getQuickDates();
+          await window.datedLinksModule.addDate(itemData, dates.tomorrow);
+          showToast('Date set to tomorrow');
+        } else if (action === 'add-date-next-week') {
+          const dates = window.itemContextMenu.getQuickDates();
+          await window.datedLinksModule.addDate(itemData, dates.nextWeek);
+          showToast('Date set to next week');
+        } else if (action === 'add-date-someday') {
+          const dates = window.itemContextMenu.getQuickDates();
+          await window.datedLinksModule.addDate(itemData, dates.someday);
+          showToast('Date set to someday');
+        } else if (action === 'add-date-custom') {
+          if (!window.dateModal) {
+            showToast('Date picker not available');
+            return true;
+          }
+          window.dateModal.show(itemData);
+          return true;
+        } else if (action === 'remove-date') {
+          await window.datedLinksModule.removeDate(bookmark.url);
+          showToast('Date removed');
+        }
+
+        return true;
+      };
+
+      const dateRow = window.itemContextMenu.createDateIconRow(hasDate, handleDateAction);
+      const renameItem = window.itemContextMenu.createMenuItem('Rename', 'rename');
+      const moveItem = window.itemContextMenu.createMenuItem('Move to...', 'move');
+
+      const menu = window.itemContextMenu.showMenuAtEvent(event, [dateRow, renameItem, moveItem]);
+      menu.addEventListener('click', (e) => {
+        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+        if (action === 'rename') {
+          startBookmarkRename(bookmark, itemElement);
+        } else if (action === 'move') {
+          showBookmarkMoveDialog(bookmark);
+        }
+        window.itemContextMenu.close();
+      });
+    })();
   }
 
   function closeBookmarkContextMenu() {
-    const existingMenu = document.getElementById('prd-stv-bookmark-context-menu');
-    if (existingMenu) {
-      existingMenu.remove();
-    }
+    window.itemContextMenu?.close?.();
+    document.getElementById('prd-stv-bookmark-context-menu')?.remove();
   }
 
   function startBookmarkRename(bookmark, itemElement) {
-    const titleElement = itemElement.querySelector('span');
+    const titleElement = itemElement.querySelector('.prd-stv-title') || itemElement.querySelector('span');
     const currentTitle = bookmark.title;
     
     // Create input element
@@ -985,20 +994,228 @@ function showToast(message, duration = 2000) {
   }
 
   function showBookmarkMoveDialog(bookmark) {
-    if (bookmark._isTab) {
-      // For tabs, save directly to bookmarks bar in overlay
-      handleSaveTabAsBookmark(bookmark._tabData);
-    } else {
-      // For bookmarks, show message to use side panel
-      showToast('Move functionality available in side panel');
+    if (!window.folderSelectorModal?.show) {
+      showToast('Folder selector not available');
+      return;
     }
+
+    (async () => {
+      if (bookmark._isTab) {
+        const selection = await window.folderSelectorModal.show({
+          title: 'Save as bookmark',
+          actionText: 'Save',
+          showTitleInput: true,
+          titleValue: bookmark.title || '',
+          excludeId: null,
+          focus: 'title',
+        });
+        if (!selection?.folderId) return;
+
+        const editedTitle = selection.title || bookmark.title || 'Untitled';
+        const bookmarkData = {
+          parentId: selection.folderId,
+          title: editedTitle,
+          url: bookmark.url
+        };
+
+        const response = await chrome.runtime.sendMessage({ type: 'CREATE_BOOKMARK', bookmarkData });
+        if (response && response.success === false) throw new Error(response.error || 'Create bookmark failed');
+
+        showToast('Tab saved as bookmark');
+        return;
+      }
+
+      const selection = await window.folderSelectorModal.show({
+        title: `Move "${bookmark.title || 'Untitled'}" to folder`,
+        actionText: 'Move',
+        showTitleInput: false,
+        excludeId: bookmark.id,
+        focus: 'search',
+      });
+      if (!selection?.folderId) return;
+
+      const response = await chrome.runtime.sendMessage({
+        type: 'MOVE_BOOKMARK',
+        bookmarkId: bookmark.id,
+        destinationId: selection.folderId
+      });
+
+      if (response && response.success === false) {
+        throw new Error(response.error || 'Move bookmark failed');
+      }
+
+      showToast('Bookmark moved');
+    })().catch((error) => {
+      console.error('Move failed:', error);
+      showToast('Failed to move');
+    });
   }
 
   function showTabContextMenu(event, tab, itemElement) {
-    // Remove any existing context menu
+    if (!window.itemContextMenu) {
+      showTabContextMenuLegacy(event, tab, itemElement);
+      return;
+    }
+
+    const computePinned = () => {
+      if (!Array.isArray(uiState.pinnedTabs)) return false;
+      return uiState.pinnedTabs.some(p => p.url === tab.url);
+    };
+
+    const computeHasDate = async () => {
+      try {
+        if (!window.datedLinksModule) return false;
+        return await window.datedLinksModule.hasDate(tab.url);
+      } catch (error) {
+        console.warn('Failed to check dated status:', error);
+        return false;
+      }
+    };
+
+    (async () => {
+      const isPinned = computePinned();
+      const hasDate = await computeHasDate();
+
+      const handleDateAction = async (action) => {
+        if (!window.datedLinksModule) {
+          showToast('Date feature not available');
+          return true;
+        }
+
+        const itemData = {
+          url: tab.url,
+          title: tab.title || 'Untitled',
+          favicon: tab.icon || tab.favIconUrl || '',
+          itemType: 'tab',
+          itemId: tab.id
+        };
+
+        if (action === 'add-date-tomorrow') {
+          const dates = window.itemContextMenu.getQuickDates();
+          await window.datedLinksModule.addDate(itemData, dates.tomorrow);
+          showToast('Date set to tomorrow');
+        } else if (action === 'add-date-next-week') {
+          const dates = window.itemContextMenu.getQuickDates();
+          await window.datedLinksModule.addDate(itemData, dates.nextWeek);
+          showToast('Date set to next week');
+        } else if (action === 'add-date-someday') {
+          const dates = window.itemContextMenu.getQuickDates();
+          await window.datedLinksModule.addDate(itemData, dates.someday);
+          showToast('Date set to someday');
+        } else if (action === 'add-date-custom') {
+          if (!window.dateModal) {
+            showToast('Date picker not available');
+            return true;
+          }
+          window.dateModal.show(itemData);
+          return true;
+        } else if (action === 'remove-date') {
+          await window.datedLinksModule.removeDate(tab.url);
+          showToast('Date removed');
+        }
+
+        return true;
+      };
+
+      const dateRow = window.itemContextMenu.createDateIconRow(hasDate, handleDateAction);
+      const renameItem = window.itemContextMenu.createMenuItem('Rename', 'rename');
+      const pinItem = window.itemContextMenu.createMenuItem(isPinned ? 'Unpin Tab' : 'Pin Tab', isPinned ? 'unpin' : 'pin');
+      const moveItem = window.itemContextMenu.createMenuItem('Move to...', 'move-to-folder');
+      const dupItem = window.itemContextMenu.createMenuItem('Duplicate Tab', 'duplicate');
+
+      const menu = window.itemContextMenu.showMenuAtEvent(event, [dateRow, renameItem, pinItem, moveItem, dupItem]);
+      menu.addEventListener('click', async (e) => {
+        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+        if (action === 'rename') {
+          startTabRename(tab, itemElement);
+        } else if (action === 'pin') {
+          await handlePinTab(tab);
+        } else if (action === 'unpin') {
+          await handleUnpinTab(tab);
+        } else if (action === 'move-to-folder') {
+          const fakeBookmark = {
+            id: `tab_${tab.id}`,
+            title: tab.title || 'Untitled',
+            url: tab.url,
+            _isTab: true,
+            _tabData: tab
+          };
+          showBookmarkMoveDialog(fakeBookmark);
+        } else if (action === 'duplicate') {
+          await handleDuplicateTab(tab);
+        }
+        window.itemContextMenu.close();
+      });
+    })();
+  }
+
+  function closeTabContextMenu() {
+    window.itemContextMenu?.close?.();
+    document.getElementById('prd-stv-tab-context-menu')?.remove();
+  }
+
+  // Legacy context menus (used outside popup.html where shared modules aren't loaded)
+  function showBookmarkContextMenuLegacy(event, bookmark, itemElement) {
+    closeBookmarkContextMenu();
+
+    const contextMenu = document.createElement('div');
+    contextMenu.id = 'prd-stv-bookmark-context-menu';
+    contextMenu.style.cssText = `
+      position: fixed;
+      background: #2b2b2b;
+      border: 1px solid #555;
+      border-radius: 15px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      min-width: 120px;
+      overflow: hidden;
+      z-index: 2147483648;
+      animation: contextMenuIn 0.15s ease-out;
+    `;
+
+    contextMenu.innerHTML = `
+      <div class="context-item" data-action="rename" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
+        <span>Rename</span>
+      </div>
+      <div class="context-item" data-action="move" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;">
+        <span>Move to...</span>
+      </div>
+    `;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes contextMenuIn {
+        from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      #prd-stv-bookmark-context-menu .context-item:hover {
+        background: #353535 !important;
+      }
+    `;
+    document.head.appendChild(style);
+
+    const buttonRect = event.target.getBoundingClientRect();
+    contextMenu.style.left = `${buttonRect.left - 120}px`;
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`;
+    document.body.appendChild(contextMenu);
+
+    contextMenu.addEventListener('click', (e) => {
+      const action = e.target.closest('.context-item')?.dataset.action;
+      if (action === 'rename') {
+        startBookmarkRename(bookmark, itemElement);
+      } else if (action === 'move') {
+        showBookmarkMoveDialog(bookmark);
+      }
+      closeBookmarkContextMenu();
+    });
+
+    setTimeout(() => {
+      document.addEventListener('click', closeBookmarkContextMenu, { once: true });
+    }, 10);
+  }
+
+  function showTabContextMenuLegacy(event, tab, itemElement) {
     closeTabContextMenu();
 
-    // Create context menu
     const contextMenu = document.createElement('div');
     contextMenu.id = 'prd-stv-tab-context-menu';
     contextMenu.style.cssText = `
@@ -1025,7 +1242,6 @@ function showToast(message, duration = 2000) {
       </div>
     `;
 
-    // Add hover styles to shadow root if available
     const style = document.createElement('style');
     style.textContent = `
       @keyframes contextMenuIn {
@@ -1038,21 +1254,16 @@ function showToast(message, duration = 2000) {
     `;
     document.head.appendChild(style);
 
-    // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
-    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
-    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
-
-    // Add to shadow root if available
+    contextMenu.style.left = `${buttonRect.left - 120}px`;
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`;
     document.body.appendChild(contextMenu);
 
-    // Handle menu item clicks
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.context-item')?.dataset.action;
       if (action === 'pin') {
         await handlePinTab(tab);
       } else if (action === 'move-to-folder') {
-        // Create a fake bookmark object to reuse the existing move dialog
         const fakeBookmark = {
           id: `tab_${tab.id}`,
           title: tab.title || 'Untitled',
@@ -1067,16 +1278,62 @@ function showToast(message, duration = 2000) {
       closeTabContextMenu();
     });
 
-    // Close menu when clicking outside
     setTimeout(() => {
       document.addEventListener('click', closeTabContextMenu, { once: true });
     }, 10);
   }
 
-  function closeTabContextMenu() {
-    const existingMenu = document.getElementById('prd-stv-tab-context-menu');
-    if (existingMenu) {
-      existingMenu.remove();
+  function startTabRename(tab, itemElement) {
+    const titleElement = itemElement.querySelector('.prd-stv-title') || itemElement.querySelector('span');
+    const currentTitle = tab.customTitle || tab.title || 'Untitled';
+
+    const inputEl = window.renameHelper?.createRenameInput
+      ? window.renameHelper.createRenameInput(currentTitle)
+      : (() => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentTitle;
+        return input;
+      })();
+
+    inputEl.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:15px;font-size:14px;outline:none;width:100%;';
+
+    titleElement.innerHTML = '';
+    titleElement.appendChild(inputEl);
+    inputEl.focus();
+    inputEl.select();
+
+    const finish = async (save = false) => {
+      const newTitle = inputEl.value.trim();
+      if (save && newTitle && newTitle !== currentTitle) {
+        try {
+          if (tab.url && window.renameHelper?.saveCustomTitle) {
+            await window.renameHelper.saveCustomTitle(tab.url, newTitle);
+          }
+          tab.customTitle = newTitle;
+          showToast('Tab renamed');
+        } catch (error) {
+          console.error('Failed to rename tab:', error);
+          showToast('Failed to rename tab');
+        }
+      }
+
+      titleElement.innerHTML = highlightMatches(tab.customTitle || tab.title || tab.url, input?.value.trim() || '');
+    };
+
+    if (window.renameHelper?.setupKeyboardHandlers) {
+      window.renameHelper.setupKeyboardHandlers(inputEl, finish);
+    } else {
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      inputEl.addEventListener('blur', () => finish(true));
     }
   }
 
@@ -1147,6 +1404,25 @@ function showToast(message, duration = 2000) {
     }
   }
 
+  async function handleUnpinTab(tab) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'REMOVE_PINNED_TAB',
+        url: tab.url
+      });
+
+      if (response && response.success) {
+        showToast('Tab unpinned');
+        loadPinnedTabs();
+      } else {
+        throw new Error(response?.error || 'Failed to unpin tab');
+      }
+    } catch (error) {
+      console.error('Failed to unpin tab:', error);
+      showToast(error.message || 'Failed to unpin tab');
+    }
+  }
+
   // Pinned Tabs Functions
   async function loadPinnedTabs() {
     try {
@@ -1163,9 +1439,12 @@ function showToast(message, duration = 2000) {
     if (!uiState.pinnedTabsEl) return;
 
     if (!pinnedTabs || pinnedTabs.length === 0) {
+      uiState.pinnedTabs = [];
       uiState.pinnedTabsEl.style.display = 'none';
       return;
     }
+
+    uiState.pinnedTabs = pinnedTabs;
 
     // Use same display style as sidepanel
     uiState.pinnedTabsEl.style.display = 'grid';
