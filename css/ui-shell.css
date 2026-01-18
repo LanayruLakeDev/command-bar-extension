@@ -681,6 +681,7 @@ img.prd-stv-favicon {
   box-sizing: border-box !important;
   outline: none !important;
   transition: border-color 0.2s ease !important;
+  margin-bottom: 12px !important;
 }
 
 .prd-stv-title-input:focus {
@@ -714,6 +715,57 @@ img.prd-stv-favicon {
   to {
     opacity: 1;
   }
+}
+
+.prd-stv-folder-search {
+  width: 100% !important;
+  padding: 8px !important;
+  background: #3a3a3a !important;
+  border: 1px solid #555 !important;
+  color: #fff !important;
+  border-radius: 15px !important;
+  margin-bottom: 16px !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+}
+
+.prd-stv-folder-search:focus {
+  border-color: #b9a079 !important;
+  box-shadow: 0 0 0 2px rgba(185, 160, 121, 0.1) !important;
+}
+
+.prd-stv-folder-list {
+  max-height: 300px !important;
+  overflow-y: auto !important;
+  border: 1px solid #555 !important;
+  border-radius: 15px !important;
+}
+
+.prd-stv-cancel-btn {
+  padding: 8px 16px !important;
+  background: #555 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 15px !important;
+  cursor: pointer !important;
+}
+
+.prd-stv-cancel-btn:hover {
+  background: #666 !important;
+}
+
+.prd-stv-move-btn {
+  padding: 8px 16px !important;
+  background: #b9a079 !important;
+  color: #000 !important;
+  border: none !important;
+  border-radius: 15px !important;
+  cursor: pointer !important;
+}
+
+.prd-stv-move-btn:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
 }
 
 .prd-stv-move-dialog {
