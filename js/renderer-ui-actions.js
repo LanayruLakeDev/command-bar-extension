@@ -3,107 +3,44 @@
 const rendererUIActions = {
   // Quick date calculation helpers
   getQuickDates() {
+    if (window.itemContextMenu?.getQuickDates) {
+      return window.itemContextMenu.getQuickDates();
+    }
+
+    // Fallback (shouldn't happen): keep behavior identical
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    // Tomorrow
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Next week (same weekday)
     const nextWeek = new Date(today);
     nextWeek.setDate(nextWeek.getDate() + 7);
-
-    // Someday (random date within next 30 days)
     const someday = new Date(today);
     const randomDays = Math.floor(Math.random() * 30) + 1;
     someday.setDate(someday.getDate() + randomDays);
-
     const formatDate = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
-
-    return {
-      tomorrow: formatDate(tomorrow),
-      nextWeek: formatDate(nextWeek),
-      someday: formatDate(someday)
-    };
+    return { tomorrow: formatDate(tomorrow), nextWeek: formatDate(nextWeek), someday: formatDate(someday) };
   },
 
   // Create date icon row for context menus (4 icons: tomorrow, next week, someday, custom)
   createDateIconRow(hasDate, handleDateAction) {
-    // SVG icons for date options
-    const icons = {
-      // Tomorrow: sun rising icon
-      tomorrow: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2v2M12 18v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M18 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-        <circle cx="12" cy="12" r="4"/>
-      </svg>`,
-      // Next week: calendar with arrow
-      nextWeek: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-        <line x1="16" y1="2" x2="16" y2="6"/>
-        <line x1="8" y1="2" x2="8" y2="6"/>
-        <line x1="3" y1="10" x2="21" y2="10"/>
-        <path d="M12 14l3 3-3 3"/>
-      </svg>`,
-      // Someday: question mark calendar
-      someday: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-        <line x1="16" y1="2" x2="16" y2="6"/>
-        <line x1="8" y1="2" x2="8" y2="6"/>
-        <line x1="3" y1="10" x2="21" y2="10"/>
-        <path d="M12 14c.5-1 1.5-1.5 2-1.5.8 0 1.5.7 1.5 1.5 0 1.5-2 2-2 3"/>
-        <circle cx="12" cy="19" r="0.5" fill="currentColor"/>
-      </svg>`,
-      // Custom: calendar with pencil
-      custom: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-        <line x1="16" y1="2" x2="16" y2="6"/>
-        <line x1="8" y1="2" x2="8" y2="6"/>
-        <line x1="3" y1="10" x2="21" y2="10"/>
-        <path d="M15 14l2 2-4 4h-2v-2l4-4z"/>
-      </svg>`,
-      // Remove: X icon
-      remove: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-      </svg>`
-    };
-
-    const createIconButton = (action, icon, title) => {
-      const btn = h('button', {
-        class: 'prd-stv-date-icon-btn',
-        'data-action': action,
-        title: title
+    if (window.itemContextMenu?.createDateIconRow) {
+      const el = window.itemContextMenu.createDateIconRow(hasDate, async (action) => {
+        const result = await handleDateAction(action);
+        // Sidepanel closes the context menu after any date action, except custom-date (modal handles it).
+        if (result === false) return false;
+        return true;
       });
-      btn.innerHTML = icon;
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await handleDateAction(action);
-        rendererUIActions.closeContextMenu();
-      });
-      return btn;
-    };
+      // Ensure sidepanel closes its menus (not just itemContextMenu's)
+      el.addEventListener('click', (e) => e.stopPropagation());
+      return el;
+    }
 
-    const dateOptionsRow = h('div', { class: 'prd-stv-date-icon-row' }, [
-      createIconButton('add-date-tomorrow', icons.tomorrow, 'Tomorrow'),
-      createIconButton('add-date-next-week', icons.nextWeek, 'Next week'),
-      createIconButton('add-date-someday', icons.someday, 'Someday'),
-      createIconButton('add-date-custom', icons.custom, 'Custom date')
-    ]);
-
-    if (!hasDate) return dateOptionsRow;
-
-    // When a date already exists, keep the same quick options for editing and show remove on a new line.
-    const removeRow = h('div', { class: 'prd-stv-date-icon-row' }, [
-      createIconButton('remove-date', icons.remove, 'Remove date')
-    ]);
-
-    return h('div', { class: 'prd-stv-date-icon-section' }, [dateOptionsRow, removeRow]);
+    return h('div', { class: 'prd-stv-date-icon-row' }, []);
   },
   // Context menu management
   showContextMenu: async (event, bookmark, itemElement) => {
@@ -680,138 +617,70 @@ const rendererUIActions = {
   },
 
   // Move dialog
-  showMoveDialog: (bookmark) => {
-    const existingDialog = document.querySelector('.prd-stv-move-dialog');
-    if (existingDialog) existingDialog.remove();
+  showMoveDialog: async (bookmark) => {
+    if (!window.folderSelectorModal || typeof window.folderSelectorModal.show !== 'function') {
+      console.error('folderSelectorModal is not available');
+      window.utils.showToast('Folder selector not available');
+      return;
+    }
 
     const isTab = bookmark._isTab;
     const isFolder = !bookmark.url && !bookmark._isTab;
     const actionText = isTab ? 'Save' : 'Move';
-    const itemType = isFolder ? 'folder' : (isTab ? 'bookmark' : 'bookmark');
-    const titleText = isTab ? `Save as bookmark` : `Move "${bookmark.title}" to ${itemType === 'folder' ? 'parent folder' : 'folder'}`;
+    const itemType = isFolder ? 'folder' : 'bookmark';
+    const titleText = isTab
+      ? 'Save as bookmark'
+      : `Move "${bookmark.title}" to ${itemType === 'folder' ? 'parent folder' : 'folder'}`;
 
-    const titleInputEl = isTab ?
-      h('input', {
-        type: 'text',
-        class: 'prd-stv-title-input',
-        placeholder: 'Bookmark title',
-        value: bookmark.title || '',
-        style: {
-          width: '100%',
-          padding: '8px',
-          background: '#3a3a3a',
-          border: '1px solid #555',
-          color: '#fff',
-          borderRadius: '15px',
-          marginBottom: '12px',
-          boxSizing: 'border-box',
-          fontSize: '14px'
+    const selection = await window.folderSelectorModal.show({
+      title: titleText,
+      actionText,
+      showTitleInput: isTab,
+      titleValue: bookmark.title || '',
+      excludeId: bookmark.id,
+      focus: isTab ? 'title' : 'search',
+    });
+
+    if (!selection || !selection.folderId) return;
+
+    try {
+      if (isTab) {
+        const editedTitle = selection.title || bookmark.title || 'Untitled';
+        const bookmarkData = {
+          parentId: selection.folderId,
+          title: editedTitle,
+          url: bookmark.url
+        };
+
+        const response = await chrome.runtime.sendMessage({
+          type: 'CREATE_BOOKMARK',
+          bookmarkData
+        });
+
+        if (response && response.success === false) {
+          throw new Error(response.error || 'Create bookmark operation failed');
         }
-      }) : null;
 
-    const dialog = h('div', {
-      class: 'prd-stv-move-dialog',
-      style: {
-        background: '#2b2b2b',
-        borderRadius: '15px',
-        padding: '20px',
-        width: '400px',
-        maxWidth: '90%',
-        maxHeight: '80%',
-        color: '#f5f5f5'
+        window.utils.showToast('Tab saved as bookmark');
+      } else {
+        const response = await chrome.runtime.sendMessage({
+          type: 'MOVE_BOOKMARK',
+          bookmarkId: bookmark.id,
+          destinationId: selection.folderId
+        });
+
+        if (response && response.success === false) {
+          throw new Error(response.error || 'Move operation failed');
+        }
+
+        window.utils.showToast(`${itemType.charAt(0).toUpperCase() + itemType.slice(1)} moved`);
       }
-    }, [
-      h('h3', { style: { margin: '0 0 16px 0', fontSize: '16px' } }, titleText),
-      titleInputEl,
-      h('input', {
-        type: 'text',
-        class: 'prd-stv-folder-search',
-        placeholder: 'Search folders...',
-        style: {
-          width: '100%',
-          padding: '8px',
-          background: '#3a3a3a',
-          border: '1px solid #555',
-          color: '#fff',
-          borderRadius: '15px',
-          marginBottom: '16px',
-          boxSizing: 'border-box'
-        }
-      }),
-      h('div', {
-        class: 'prd-stv-folder-list',
-        style: {
-          maxHeight: '300px',
-          overflowY: 'auto',
-          border: '1px solid #555',
-          borderRadius: '15px'
-        }
-      }, h('div', {
-        style: { padding: '16px', textAlign: 'center', color: '#999' }
-      }, 'Loading folders...')),
-      h('div', {
-        style: {
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '8px',
-          marginTop: '16px'
-        }
-      }, [
-        h('button', {
-          class: 'prd-stv-cancel-btn',
-          style: {
-            padding: '8px 16px',
-            background: '#555',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '15px',
-            cursor: 'pointer'
-          }
-        }, 'Cancel'),
-        h('button', {
-          class: 'prd-stv-move-btn',
-          disabled: true,
-          style: {
-            padding: '8px 16px',
-            background: '#b9a079',
-            color: '#000',
-            border: 'none',
-            borderRadius: '15px',
-            cursor: 'pointer'
-          }
-        }, actionText)
-      ])
-    ]);
 
-    const overlay = h('div', {
-      class: 'prd-stv-move-overlay',
-      style: {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        width: '100%',
-        height: '100%',
-        background: 'rgba(0,0,0,0.5)',
-        zIndex: '20000',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }
-    }, dialog);
-
-    document.body.appendChild(overlay);
-
-    rendererUIActions.setupMoveDialog(dialog, bookmark, overlay);
-
-    const titleInput = dialog.querySelector('.prd-stv-title-input');
-    const searchInput = dialog.querySelector('.prd-stv-folder-search');
-    if (titleInput) {
-      setTimeout(() => {
-        titleInput.focus();
-        titleInput.select();
-      }, 100);
-    } else if (searchInput) {
-      setTimeout(() => searchInput.focus(), 100);
+      await window.reloadBookmarks();
+      await window.renderer.render(window.state, window.elements);
+    } catch (error) {
+      console.error('Failed to move item:', error);
+      window.utils.showToast('Failed to move item');
     }
   },
 
@@ -974,77 +843,19 @@ const rendererUIActions = {
   },
 
   extractFolders: (bookmarkTree, excludeId = null) => {
-    const folders = [];
-
-    const traverse = (nodes, path = '') => {
-      if (!nodes) return;
-
-      nodes.forEach(node => {
-        if (!node.url && node.id !== excludeId) {
-          const currentPath = path ? `${path} > ${node.title}` : node.title;
-          folders.push({
-            id: node.id,
-            title: node.title,
-            path: currentPath
-          });
-
-          if (node.children) {
-            traverse(node.children, currentPath);
-          }
-        }
-      });
-    };
-
-    traverse(bookmarkTree);
-    return folders;
+    if (window.folderSelectorModal?.extractFolders) {
+      return window.folderSelectorModal.extractFolders(bookmarkTree, excludeId);
+    }
+    return [];
   },
 
   renderFolderList: (container, folders, onSelect) => {
-    // Clear existing content
-    container.innerHTML = '';
-
-    if (folders.length === 0) {
-      container.appendChild(
-        h('div', {
-          style: { padding: '16px', textAlign: 'center', color: '#999' }
-        }, 'No folders found')
-      );
-    } else {
-      folders.forEach((folder, index) => {
-        const folderItem = h('div', {
-          class: 'prd-stv-folder-item',
-          'data-folder-id': folder.id,
-          'data-index': index,
-          style: {
-            padding: '8px 12px',
-            cursor: 'pointer',
-            borderBottom: '1px solid #3a3a3a',
-            display: 'flex',
-            flexDirection: 'column'
-          }
-        }, [
-          h('div', {
-            style: { fontSize: '14px', color: '#f5f5f5' }
-          }, folder.title),
-          h('div', {
-            style: { fontSize: '12px', color: '#999', marginTop: '2px' }
-          }, folder.path)
-        ]);
-        container.appendChild(folderItem);
-      });
-    }
-
-    container.addEventListener('click', (e) => {
-      const folderItem = e.target.closest('.prd-stv-folder-item');
-      if (folderItem && folderItem.dataset.folderId) {
-        const clickedIndex = parseInt(folderItem.dataset.index);
-        if (!isNaN(clickedIndex)) {
-          const dialog = folderItem.closest('.prd-stv-move-dialog');
-          if (dialog && dialog._selectedIndexSetter) {
-            dialog._selectedIndexSetter(clickedIndex);
-          }
-        }
-        onSelect(folderItem.dataset.folderId);
+    if (!window.folderSelectorModal?.renderFolderList) return;
+    window.folderSelectorModal.renderFolderList(container, folders, {
+      onSelect,
+      setSelectedIndex: (index) => {
+        const dialog = container.closest('.prd-stv-move-dialog');
+        dialog?._selectedIndexSetter?.(index);
       }
     });
   },
